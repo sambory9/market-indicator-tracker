@@ -181,12 +181,48 @@ def fetch_flow_naver(market: str, pages: int = 15) -> pd.DataFrame:
     raise RuntimeError(f"naver 수급 실패: {last_err}")
 
 
+def fetch_flow_daum(market: str, pages: int = 3, per_page: int = 100) -> pd.DataFrame:
+    """다음 금융 투자자별 일별 순매수 (원 → 억원). 본장 기준."""
+    hdr = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+                         "(KHTML, like Gecko) Chrome/130.0 Safari/537.36",
+           "Referer": "https://finance.daum.net/domestic/investors",
+           "Accept": "application/json, text/plain, */*"}
+    rows = []
+    for page in range(1, pages + 1):
+        url = (f"https://finance.daum.net/api/investor/{market}/days?market={market}"
+               f"&page={page}&perPage={per_page}&details=true&pagination=true")
+        res = requests.get(url, headers=hdr, timeout=20)
+        res.raise_for_status()
+        data = res.json().get("data", [])
+        if not data:
+            break
+        rows.extend(data)
+        time.sleep(0.3)
+    if not rows:
+        raise RuntimeError("daum 응답 없음")
+    recs = []
+    for x in rows:
+        d = x.get("details") or {}
+        recs.append({
+            "date": pd.to_datetime(x["date"][:10]),
+            "개인": x.get("individualStraightPurchasePrice"),
+            "외국인": x.get("foreignStraightPurchasePrice"),
+            "기관합계": x.get("institutionStraightPurchasePrice"),
+            "연기금": d.get("PENSION_FUND"),
+            "투신": d.get("MUTUAL_FUND"),
+        })
+    out = pd.DataFrame(recs).set_index("date").sort_index()
+    out = out[~out.index.duplicated(keep="last")]
+    out = (out.apply(pd.to_numeric, errors="coerce") / 1e8).round(0)
+    return out[FLOW_COLS]
+
+
 def fetch_flow(market: str) -> pd.DataFrame:
     try:
-        return fetch_flow_pykrx(market)
+        return fetch_flow_daum(market)
     except Exception as e:  # noqa: BLE001
-        print(f"  pykrx {market} 실패({e}) → 네이버로 대체", file=sys.stderr)
-        return fetch_flow_naver(market)
+        print(f"  daum {market} 실패({e}) → pykrx로 대체", file=sys.stderr)
+        return fetch_flow_pykrx(market)
 
 
 def fetch_flow_pykrx(market: str) -> pd.DataFrame:

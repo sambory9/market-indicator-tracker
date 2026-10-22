@@ -119,7 +119,63 @@ def fetch_ecos(item: str, key: str) -> pd.DataFrame:
     return df.dropna().set_index("date")
 
 
+NAVER_SOSOK = {"KOSPI": ["01", ""], "KOSDAQ": ["02"]}
+NAVER_COLMAP = {"개인": "개인", "외국인": "외국인", "기관계": "기관합계",
+                "투신(사모)": "투신", "투신": "투신", "연기금등": "연기금", "연기금": "연기금"}
+
+
+def fetch_flow_naver(market: str, pages: int = 15) -> pd.DataFrame:
+    """네이버 금융 '투자자별 매매동향(일별)'. 단위 억원."""
+    hdr = {"User-Agent": "Mozilla/5.0", "Referer": "https://finance.naver.com/sise/"}
+    bizdate = datetime.now(KST).strftime("%Y%m%d")
+    last_err = None
+    for sosok in NAVER_SOSOK[market]:
+        frames = []
+        try:
+            for page in range(1, pages + 1):
+                url = (f"https://finance.naver.com/sise/investorDealTrendDay.naver"
+                       f"?bizdate={bizdate}&sosok={sosok}&page={page}")
+                res = requests.get(url, headers=hdr, timeout=20)
+                res.encoding = "euc-kr"
+                tables = pd.read_html(io.StringIO(res.text))
+                t = next((x for x in tables if x.shape[1] >= 8), None)
+                if t is None:
+                    break
+                if isinstance(t.columns, pd.MultiIndex):
+                    t.columns = [c[-1] for c in t.columns]
+                t = t.rename(columns={t.columns[0]: "date"})
+                t = t[t["date"].astype(str).str.match(r"^\d{2}\.\d{2}\.\d{2}$")]
+                if t.empty:
+                    break
+                frames.append(t)
+                time.sleep(0.3)
+            if not frames:
+                raise RuntimeError(f"sosok={sosok} 표 없음")
+            df = pd.concat(frames)
+            df["date"] = pd.to_datetime(df["date"], format="%y.%m.%d")
+            df = df.set_index("date").rename(columns=NAVER_COLMAP)
+            out = pd.DataFrame(index=df.index)
+            for c in FLOW_COLS:
+                out[c] = pd.to_numeric(df[c].astype(str).str.replace(",", ""), errors="coerce") if c in df.columns else np.nan
+            out = out[~out.index.duplicated()].sort_index()
+            out.index.name = "date"
+            (FLOWS / f"_source_{market}.txt").write_text(
+                f"naver sosok={sosok!r} rows={len(out)} cols={list(df.columns)}\n", encoding="utf-8")
+            return out
+        except Exception as e:  # noqa: BLE001
+            last_err = e
+    raise RuntimeError(f"naver 수급 실패: {last_err}")
+
+
 def fetch_flow(market: str) -> pd.DataFrame:
+    try:
+        return fetch_flow_pykrx(market)
+    except Exception as e:  # noqa: BLE001
+        print(f"  pykrx {market} 실패({e}) → 네이버로 대체", file=sys.stderr)
+        return fetch_flow_naver(market)
+
+
+def fetch_flow_pykrx(market: str) -> pd.DataFrame:
     from pykrx import stock
 
     end = datetime.now(KST)

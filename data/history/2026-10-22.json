@@ -845,7 +845,7 @@
   "코스닥 수급"
  ],
  "errors": [
-  "국고채 3년: HTTPSConnectionPool(host='ecos.bok.or.kr', port=443): Max retries exceeded with url: /api/StatisticSearch/2DJVMBWP4ZCQD9TIOQDG/json/kr/1/2000/817Y002/D/20231024/20261023/010200000 (Caused by ConnectTimeoutError(<HTTPSConnection(host='ecos.bok.or.kr', port=443) at 0x7ff7c852e960>, 'Connection to ecos.bok.or.kr timed out. (connect timeout=30)'))",
-  "국고채 10년: HTTPSConnectionPool(host='ecos.bok.or.kr', port=443): Max retries exceeded with url: /api/StatisticSearch/2DJVMBWP4ZCQD9TIOQDG/json/kr/1/2000/817Y002/D/20231024/20261023/010210000 (Caused by ConnectTimeoutError(<HTTPSConnection(host='ecos.bok.or.kr', port=443) at 0x7ff7c83e7a40>, 'Connection to ecos.bok.or.kr timed out. (connect timeout=30)'))"
+  "국고채 3년: ECOS 연결 실패(ConnectTimeout)",
+  "국고채 10년: ECOS 연결 실패(ConnectTimeout)"
  ]
 }

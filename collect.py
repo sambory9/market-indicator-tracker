@@ -112,9 +112,19 @@ def fetch_ecos(item: str, key: str) -> pd.DataFrame:
     start = end - timedelta(days=365 * 3)
     url = (f"https://ecos.bok.or.kr/api/StatisticSearch/{key}/json/kr/1/2000/"
            f"817Y002/D/{start:%Y%m%d}/{end:%Y%m%d}/{item}")
-    r = requests.get(url, timeout=30)
-    r.raise_for_status()
-    body = r.json()
+    body, last = None, None
+    for attempt in range(3):
+        try:
+            r = requests.get(url, timeout=30)
+            r.raise_for_status()
+            body = r.json()
+            break
+        except Exception as e:  # noqa: BLE001
+            # 인증키가 URL에 들어 있으므로 원문 오류를 그대로 남기지 않는다
+            last = type(e).__name__
+            time.sleep(10)
+    if body is None:
+        raise RuntimeError(f"ECOS 연결 실패({last})")
     rows = body.get("StatisticSearch", {}).get("row", [])
     if not rows:
         raise RuntimeError(f"ECOS 응답 없음: {body.get('RESULT', body)}")
@@ -457,6 +467,10 @@ def main():
             errors.append(f"{name}: {e}")
             print(f"ERR {id_}: {e}", file=sys.stderr)
 
+    # 공개 저장소이므로 오류 문구에 비밀값이 남지 않게 한다
+    if key:
+        errors = [e.replace(key, "***") for e in errors]
+
     # 파생 지표: 미국채 2-10년 금리차
     by_id = {x["id"]: x for x in items}
     spreads = {}
@@ -477,7 +491,8 @@ def main():
     # 신호 이력: 날짜별 스냅샷 (같은 날 재실행 시 덮어씀)
     hist = DATA / "history"
     hist.mkdir(exist_ok=True)
-    (hist / f"{now:%Y-%m-%d}.json").write_text(json.dumps(latest, ensure_ascii=False, indent=1), encoding="utf-8")
+    kd = by_id.get("kospi", {}).get("date", now.strftime("%Y-%m-%d"))  # 국내 거래일 기준 파일명
+    (hist / f"{kd}.json").write_text(json.dumps(latest, ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"완료: {len(items)}개 지표, 오류 {len(errors)}건, 국내 지연 {stale}")
     # 절반 이상 실패하면 워크플로를 실패로 표시해 알림을 받는다
     if len(items) < (len(YAHOO) + len(FRED) + len(ECOS) + len(FLOW_MARKETS)) / 2:

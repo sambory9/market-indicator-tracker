@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>지표추적자 대시보드</title>
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--fg:#1d2330;--mut:#6b7280;--line:#e5e7eb;--up:#d93a3a;--dn:#2f6fdb;--chip:#eef1f5;--warn:#b45309;
+--ma20:#e0a100;--ma60:#16a34a;--ma120:#8b5cf6;--bb:#94a3b8}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1218;--card:#171b23;--fg:#e6e8ec;--mut:#9aa1ad;--line:#262c36;--chip:#222833;--warn:#f59e0b}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR",sans-serif}
+header{padding:16px;max-width:1280px;margin:auto}h1{font-size:20px;margin:0 0 4px}.sub{color:var(--mut);font-size:12px}
+nav{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+nav .in{max-width:1280px;margin:auto;padding:8px 16px;display:flex;gap:6px;overflow-x:auto;align-items:center}
+nav button,.seg button{border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:16px;padding:5px 12px;font-size:13px;white-space:nowrap;cursor:pointer}
+nav button.on,.seg button.on{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+main{max-width:1280px;margin:auto;padding:12px 16px 40px}
+.sig{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 4px}.chip{background:var(--chip);border-radius:12px;padding:3px 9px;font-size:12px}
+.chip b{font-weight:600}.warn{color:var(--warn)}
+h2{font-size:16px;margin:22px 0 10px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:12px}
+@media (max-width:440px){.grid{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;min-width:0}
+.top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.nm{font-weight:600}.px{font-size:18px;font-weight:600;font-variant-numeric:tabular-nums}
+.chg{font-size:13px;font-variant-numeric:tabular-nums}.u{color:var(--up)}.d{color:var(--dn)}
+.meta{color:var(--mut);font-size:12px;margin:2px 0 6px;display:flex;flex-wrap:wrap;gap:4px 10px}
+.seg{display:flex;gap:4px;margin:4px 0}.seg button{padding:2px 9px;font-size:12px}
+.ch{height:230px}.osc{height:80px;margin-top:4px}
+.legend{font-size:11px;color:var(--mut);display:flex;gap:10px;margin-top:4px}.legend i{display:inline-block;width:10px;height:2px;vertical-align:middle;margin-right:3px}
+.sigs{margin-top:6px;display:flex;flex-wrap:wrap;gap:4px}.sigs span{font-size:11px;background:var(--chip);border-radius:8px;padding:1px 7px}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:13px}td,th{padding:4px 6px;border-bottom:1px solid var(--line);text-align:right}th:first-child,td:first-child{text-align:left}
+.fch{height:240px}
+</style>
+</head>
+<body>
+<header><h1>지표추적자 대시보드</h1><div class="sub" id="gen"></div><div class="sig" id="sig"></div></header>
+<nav><div class="in" id="nav"></div></nav>
+<main id="main"></main>
+<script>
+const LW = LightweightCharts;
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const fmt = (v, nd=2) => v==null ? '–' : Number(v).toLocaleString('ko-KR',{maximumFractionDigits:nd, minimumFractionDigits:0});
+const sgn = v => v==null ? '' : (v>0?'u':v<0?'d':'');
+const pctTxt = v => v==null ? '–' : (v>0?'+':'')+v.toFixed(2)+'%';
+
+function sma(a,n){const o=[];let s=0;for(let i=0;i<a.length;i++){s+=a[i].v;if(i>=n)s-=a[i-n].v;if(i>=n-1)o.push({time:a[i].t,value:s/n});}return o}
+function bb(a,n=20,k=2){const up=[],lo=[];for(let i=n-1;i<a.length;i++){const w=a.slice(i-n+1,i+1).map(x=>x.v);const m=w.reduce((x,y)=>x+y)/n;const sd=Math.sqrt(w.reduce((x,y)=>x+(y-m)**2,0)/(n-1));up.push({time:a[i].t,value:m+k*sd});lo.push({time:a[i].t,value:m-k*sd});}return[up,lo]}
+function rsi(a,n=14){const o=[];let g=0,l=0;for(let i=1;i<a.length;i++){const d=a[i].v-a[i-1].v,up=Math.max(d,0),dn=Math.max(-d,0);if(i<=n){g+=up/n;l+=dn/n}else{g=(g*(n-1)+up)/n;l=(l*(n-1)+dn)/n}if(i>=n)o.push({time:a[i].t,value:l===0?100:100-100/(1+g/l)})}return o}
+function ema(v,n){const k=2/(n+1);const o=[];let e=v[0];for(let i=0;i<v.length;i++){e=i?v[i]*k+e*(1-k):v[0];o.push(e)}return o}
+function macd(a){const v=a.map(x=>x.v);const e26=ema(v,26);const m=ema(v,12).map((x,i)=>x-e26[i]);const s=ema(m,9);return a.map((x,i)=>({time:x.t,value:m[i]-s[i],color:m[i]-s[i]>=0?css('--up'):css('--dn')}))}
+
+function baseChart(el,h){return LW.createChart(el,{height:h,layout:{background:{color:'transparent'},textColor:css('--mut'),fontSize:11},
+ grid:{vertLines:{visible:false},horzLines:{color:css('--line')}},rightPriceScale:{borderVisible:false},timeScale:{borderVisible:false},
+ crosshair:{mode:0},handleScroll:true,handleScale:true,localization:{locale:'ko-KR'}})}
+
+let DATA, charts=[];
+function drawCard(s, card, mode){
+  card.querySelectorAll('.ch,.osc').forEach(e=>e.innerHTML='');
+  const raw = s[mode]; const bars = raw.map(r=>({time:r[0],open:r[1],high:r[2],low:r[3],close:r[4]}));
+  const cl = raw.map(r=>({t:r[0],v:r[4]}));
+  const c = baseChart(card.querySelector('.ch'),230); charts.push(c);
+  const flat = s.rate || raw.every(r=>r[1]===r[4]&&r[2]===r[4]);
+  const main = flat ? c.addLineSeries({color:css('--fg'),lineWidth:2,priceLineVisible:false})
+                    : c.addCandlestickSeries({upColor:css('--up'),downColor:css('--dn'),borderVisible:false,wickUpColor:css('--up'),wickDownColor:css('--dn'),priceLineVisible:false});
+  main.setData(flat ? cl.map(x=>({time:x.t,value:x.v})) : bars);
+  [[20,'--ma20'],[60,'--ma60'],[120,'--ma120']].forEach(([n,col])=>{ if(cl.length>n) c.addLineSeries({color:css(col),lineWidth:1,priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false}).setData(sma(cl,n)) });
+  if(cl.length>20){const [u,l]=bb(cl);[u,l].forEach(d=>c.addLineSeries({color:css('--bb'),lineWidth:1,lineStyle:2,priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false}).setData(d))}
+  const span = mode==='daily'?130:104; c.timeScale().setVisibleLogicalRange({from:Math.max(0,bars.length-span),to:bars.length+2});
+  const oe = card.querySelector('.osc');
+  if(s.osc || s.id==='kospi' || s.id==='kosdaq'){
+    oe.style.display='block'; const o = baseChart(oe,80); charts.push(o);
+    if(s.osc && card.dataset.osc==='macd'){ o.addHistogramSeries({priceLineVisible:false}).setData(macd(cl)); }
+    else { const r=o.addLineSeries({color:css('--fg'),lineWidth:1,priceLineVisible:false}); r.setData(rsi(cl));
+      [70,30].forEach(v=>r.createPriceLine({price:v,color:css('--bb'),lineStyle:2,lineWidth:1,axisLabelVisible:false})); }
+    o.timeScale().applyOptions({visible:false});
+    c.timeScale().subscribeVisibleLogicalRangeChange(rg=>rg&&o.timeScale().setVisibleLogicalRange(rg));
+  } else oe.style.display='none';
+}
+
+function card(s){
+  const L = s.latest||{}; const el=document.createElement('div'); el.className='card'; el.dataset.osc='rsi';
+  const chg = s.rate ? (L.chg_1d_bp!=null?`${L.chg_1d_bp>0?'+':''}${L.chg_1d_bp}bp`:'–') : pctTxt(L.chg_1d);
+  const c1 = s.rate ? L.chg_1d_bp : L.chg_1d;
+  const ma = [20,60,120].map(n=>L['ma'+n]==null?'':`${n}일선 ${L['above_ma'+n]?'위':'아래'}`).filter(Boolean).join(' · ');
+  el.innerHTML = `<div class="top"><span class="nm">${s.name}</span><span><span class="px">${fmt(L.close, s.rate?2:2)}${s.rate?'%':''}</span> <span class="chg ${sgn(c1)}">${chg}</span></span></div>
+   <div class="meta"><span>${L.date||''}</span><span>${s.rate?'5일 '+(L.chg_5d_bp??'–')+'bp':'5일 '+pctTxt(L.chg_5d)}</span><span>${s.rate?'주간 '+(L.chg_week??'–')+'bp':'주간 '+pctTxt(L.chg_week)}</span>${L.rsi14!=null?`<span>RSI ${L.rsi14}</span>`:''}${L.bb_pos!=null?`<span>볼린저 ${L.bb_pos}%</span>`:''}</div>
+   <div class="meta">${ma}</div>
+   <div class="seg"><button class="on" data-m="daily">일봉</button><button data-m="weekly">주봉</button>${s.osc?'<button data-o="rsi" class="on o">RSI</button><button data-o="macd" class="o">MACD</button>':''}</div>
+   <div class="ch"></div><div class="osc"></div>
+   <div class="legend"><span><i style="background:var(--ma20)"></i>20</span><span><i style="background:var(--ma60)"></i>60</span><span><i style="background:var(--ma120)"></i>120</span><span><i style="background:var(--bb)"></i>볼린저</span></div>
+   ${(L.signals||[]).length?`<div class="sigs">${L.signals.map(x=>`<span>${x}</span>`).join('')}</div>`:''}`;
+  let mode='daily';
+  el.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{mode=b.dataset.m;el.querySelectorAll('[data-m]').forEach(x=>x.classList.toggle('on',x===b));drawCard(s,el,mode)});
+  el.querySelectorAll('[data-o]').forEach(b=>b.onclick=()=>{el.dataset.osc=b.dataset.o;el.querySelectorAll('[data-o]').forEach(x=>x.classList.toggle('on',x===b));drawCard(s,el,mode)});
+  requestAnimationFrame(()=>drawCard(s,el,mode));
+  return el;
+}
+
+function flowCard(f){
+  const el=document.createElement('div'); el.className='card'; const L=f.latest||{};
+  const cols=['외국인','개인','기관합계','연기금','투신'];
+  const tbl = `<table><tr><th>억원</th><th>오늘</th><th>주간</th><th>20일</th><th>올해</th></tr>${cols.map(c=>`<tr><td>${c}</td>${['today','sum_week','sum_20d','sum_ytd'].map(k=>{const v=(L[k]||{})[c];return `<td class="${sgn(v)}">${fmt(v,0)}</td>`}).join('')}</tr>`).join('')}</table>`;
+  el.innerHTML = `<div class="top"><span class="nm">${f.name}</span><span class="meta">${L.date||''}</span></div>${tbl}
+   <div class="seg" style="margin-top:8px">${cols.map((c,i)=>`<button data-c="${c}" class="${i?'':'on'}">${c}</button>`).join('')}</div>
+   <div class="fch"></div><div class="legend"><span>막대: 일별 순매수 · 선: 기간 누적(오른쪽 축)</span></div>
+   ${(L.signals||[]).length?`<div class="sigs">${L.signals.map(x=>`<span>${x}</span>`).join('')}</div>`:''}`;
+  const draw=(col)=>{const box=el.querySelector('.fch');box.innerHTML='';const c=baseChart(box,240);charts.push(c);
+    const ix=f.cols.indexOf(col)+1; const rows=f.rows.slice(-250); let cum=0;
+    c.addHistogramSeries({priceLineVisible:false,priceScaleId:'left'}).setData(rows.map(r=>({time:r[0],value:r[ix],color:r[ix]>=0?css('--up'):css('--dn')})));
+    c.applyOptions({leftPriceScale:{visible:true,borderVisible:false}});
+    c.addLineSeries({color:css('--fg'),lineWidth:2,priceLineVisible:false}).setData(rows.map(r=>({time:r[0],value:(cum+=r[ix])})));
+    c.timeScale().setVisibleLogicalRange({from:rows.length-120,to:rows.length+1});};
+  el.querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>{el.querySelectorAll('[data-c]').forEach(x=>x.classList.toggle('on',x===b));draw(b.dataset.c)});
+  requestAnimationFrame(()=>draw('외국인'));
+  return el;
+}
+
+function render(sector){
+  charts.forEach(c=>c.remove()); charts=[];
+  const m=document.getElementById('main'); m.innerHTML='';
+  const secs = sector==='전체' ? DATA.sectors : [sector];
+  secs.forEach(sec=>{
+    const items = sec==='수급' ? DATA.flows : DATA.series.filter(s=>s.sector===sec);
+    if(!items.length) return;
+    const h=document.createElement('h2'); h.textContent=sec; m.appendChild(h);
+    const g=document.createElement('div'); g.className='grid'; m.appendChild(g);
+    items.forEach(s=>g.appendChild(sec==='수급'?flowCard(s):card(s)));
+    if(sec==='금리' && DATA.spreads){const p=document.createElement('div');p.className='sub';p.style.marginTop='8px';
+      p.textContent=`금리차: 미국 10-2년 ${DATA.spreads.us_10y_2y_bp??'–'}bp · 한국 10-3년 ${DATA.spreads.kr_10y_3y_bp??'–'}bp`;m.appendChild(p)}
+  });
+}
+
+fetch('data.json?'+Date.now()).then(r=>r.json()).then(d=>{
+  DATA=d;
+  document.getElementById('gen').textContent=`수집 ${d.generated_at.replace('T',' ').slice(0,16)} KST · 야후 파이낸스, FRED, 한국은행 ECOS, 다음 금융`+(d.errors.length?` · 오류 ${d.errors.length}건`:'');
+  const sig=[...d.series.map(s=>[s.name,s.latest]),...d.flows.map(f=>[f.name,f.latest])].flatMap(([n,L])=>(L&&L.signals||[]).map(x=>`<span class="chip"><b>${n}</b> ${x}</span>`));
+  document.getElementById('sig').innerHTML = sig.length?sig.join(''):'<span class="chip">오늘 신호 없음</span>';
+  const nav=document.getElementById('nav'); let cur='전체';try{cur=localStorage.getItem('sec')||'전체'}catch(e){}if(cur!=='전체'&&!d.sectors.includes(cur))cur='전체';
+  ['전체',...d.sectors].forEach(s=>{const b=document.createElement('button');b.textContent=s;b.className=s===cur?'on':'';
+    b.onclick=()=>{cur=s;try{localStorage.setItem('sec',s)}catch(e){};nav.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));render(s)};nav.appendChild(b)});
+  render(cur);
+}).catch(e=>{document.getElementById('main').textContent='데이터를 불러오지 못했습니다: '+e});
+</script>
+</body>
+</html>

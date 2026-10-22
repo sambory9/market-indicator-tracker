@@ -474,6 +474,10 @@ def main():
     latest = {"generated_at": now.isoformat(timespec="seconds"), "items": items,
               "spreads": spreads, "stale_domestic": stale, "errors": errors}
     (DATA / "latest.json").write_text(json.dumps(latest, ensure_ascii=False, indent=1), encoding="utf-8")
+    # 신호 이력: 날짜별 스냅샷 (같은 날 재실행 시 덮어씀)
+    hist = DATA / "history"
+    hist.mkdir(exist_ok=True)
+    (hist / f"{now:%Y-%m-%d}.json").write_text(json.dumps(latest, ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"완료: {len(items)}개 지표, 오류 {len(errors)}건, 국내 지연 {stale}")
     # 절반 이상 실패하면 워크플로를 실패로 표시해 알림을 받는다
     if len(items) < (len(YAHOO) + len(FRED) + len(ECOS) + len(FLOW_MARKETS)) / 2:

@@ -1,0 +1,65 @@
+status=410 len=1499 url=https://finance.naver.com/sise/investorDealTrendDay.naver?bizdate=20261022&sosok=&page=1
+tables=[(2, 11)]
+cols=[["('날짜', '날짜')", "('개인', '개인')", "('외국인', '외국인')", "('기관계', '기관계')", "('기관', '금융투자')", "('기관', '보험')", "('기관', '투신 (사모)')", "('기관', '은행')", "('기관', '기타금융기관')", "('기관', '연기금등')", "('기타법인', '기타법인')"]]
+head=[[{('날짜', '날짜'): nan, ('개인', '개인'): nan, ('외국인', '외국인'): nan, ('기관계', '기관계'): nan, ('기관', '금융투자'): nan, ('기관', '보험'): nan, ('기관', '투신 (사모)'): nan, ('기관', '은행'): nan, ('기관', '기타금융기관'): nan, ('기관', '연기금등'): nan, ('기타법인', '기타법인'): nan}, {('날짜', '날짜'): '이 페이지는 더 이상 제공되지 않습니다. Npay 증권 바로가기', ('개인', '개인'): '이 페이지는 더 이상 제공되지 않습니다. Npay 증권 바로가기', ('외국인', '외국인'): '이 페이지는 더 이상 제공되지 않습니다. Npay 증권 바로가기', ('기관계', '기관계'): '이 페이지는 더 이상 제공되지 않습니다. Npay 증권 바로가기', ('기관', '금융투자'): '이 페이지는 더 이상 제공되지 않습니다. Npay 증권 바로가기', ('기관', '보험'): '이 페이지는 더 이상 제공되지 않습니다. Npay 증권 바로가기', ('기관', '투신 (사모)'): '이 페이지는 더 이상 제공되지 않습니다. Npay 증권 바로가기', ('기관', '은행'): '이 페이지는 더 이상 제공되지 않습니다. Npay 증권 바로가기', ('기관', '기타금융기관'): '이 페이지는 더 이상 제공되지 않습니다. Npay 증권 바로가기', ('기관', '연기금등'): '이 페이지는 더 이상 제공되지 않습니다. Npay 증권 바로가기', ('기타법인', '기타법인'): '이 페이지는 더 이상 제공되지 않습니다. Npay 증권 바로가기'}]]
+---
+<html lang="ko">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=euc-kr">
+<title>Npay 증권</title>
+<link rel="stylesheet" type="text/css" href="https://ssl.pstatic.net/imgstock/static.pc/20261001211942/css/newstock.css">
+<link rel="stylesheet" type="text/css" href="https://ssl.pstatic.net/imgstock/static.pc/20261001211942/css/common.css">
+</head>
+<body>
+<h4 class="top_tlt2"><span class="head">일자별 순매수</span> <span class="top_tlt_guide">(단위:억원)</span></h4>
+<table summary="일자별 순매수에 관한 표 입니다." cellpadding="0" cellspacing="0" class="type_1">
+<caption>일자별 순매수</caption>
+	<col width="53px">
+	<col width="53px">
+	<col width="53px">
+	<col width="53px">
+	<col width="53px">
+	<col width="53px">
+	<col width="53px">
+	<col width="53px">
+	<col width="55px">
+	<col width="53px">
+	<col width="*">
+	
+	<tr class="udline">
+		<th rowspan="2" class="noln">날짜</th>
+		<th rowspan="2">개인</th>
+		<th rowspan="2">외국인</th>
+		<th rowspan="2">기관계</th>
+		<th colspan="6" class="eb">기관</th>
+		<th rowspan="2">기타법인</th>
+	</tr>
+	<tr class="udline">
+		<th class="sub">금융투자</th>
+		<th class="sub">보험</th>
+		<th class="sub">투신<br>(사모)</th>
+		<th class="sub">은행</th>
+		<th class="sub">기타금융기관</th>
+		<th class="sub">연기금등</th>
+	</tr>
+	<tr>
+		<td colspan="11" class="blank_07"></td>
+	</tr>
+
+		
+		
+		
+			
+		
+	
+	
+
+	
+		<tr><td colspan="11" style="text-align:center; padding:24px 0; color:#666;">이 페이지는 더 이상 제공되지 않습니다. <a href="https://stock.naver.com/" target="_blank">Npay 증권 바로가기</a></td></tr>
+	
+	
+
+</table>
+
+</body>
+

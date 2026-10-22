@@ -71,9 +71,6 @@ def main():
            "errors": latest.get("errors", []), "sectors": SECTOR_ORDER,
            "series": series, "flows": flows}
     DOCS.mkdir(exist_ok=True)
-    rep = DATA / "report" / "latest.md"   # Claude가 쓴 리포트(있을 때만 대시보드 상단에 표시)
-    if rep.exists():
-        (DOCS / "report.md").write_text(rep.read_text(encoding="utf-8"), encoding="utf-8")
     (DOCS / "data.json").write_text(json.dumps(out, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     print(f"docs/data.json: {len(series)} series, {len(flows)} flows")
 

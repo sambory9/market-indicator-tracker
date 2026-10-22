@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>지표추적자 대시보드</title>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
 <style>
 :root{--bg:#f6f7f9;--card:#fff;--fg:#1d2330;--mut:#6b7280;--line:#e5e7eb;--up:#d93a3a;--dn:#2f6fdb;--chip:#eef1f5;--warn:#b45309;
 --ma20:#e0a100;--ma60:#16a34a;--ma120:#8b5cf6;--bb:#94a3b8}
@@ -42,7 +41,6 @@ details summary{cursor:pointer;font-weight:600}
 </head>
 <body>
 <header><h1>지표추적자 대시보드</h1><div class="sub" id="gen"></div>
-<div id="rep" class="card" style="margin-top:10px"><details open><summary id="repT">오늘의 리포트</summary><div class="rep" id="repB"></div></details></div>
 <div class="sig" id="sig"></div></header>
 <nav><div class="in" id="nav"></div></nav>
 <main id="main"></main>
@@ -174,13 +172,6 @@ fetch('data.json?'+Date.now()).then(r=>r.json()).then(d=>{
   ['전체',...d.sectors].forEach(s=>{const b=document.createElement('button');b.textContent=s;b.className=s===cur?'on':'';
     b.onclick=()=>{cur=s;try{localStorage.setItem('sec',s)}catch(e){};nav.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));render(s)};nav.appendChild(b)});
   render(cur);
-  // 리포트 본문(있을 때만): Claude가 쓴 해석. 없으면 숨김
-  fetch('report.md?'+Date.now()).then(r=>r.ok?r.text():'').then(t=>{
-    if(!t||!window.marked) return;
-    const first=(t.match(/^#\s+(.+)$/m)||[])[1]; if(first) document.getElementById('repT').textContent=first;
-    document.getElementById('repB').innerHTML=marked.parse(t.replace(/^#\s+.+$/m,''));
-    document.getElementById('rep').classList.add('on');
-  }).catch(()=>{});
 }).catch(e=>{document.getElementById('main').textContent='데이터를 불러오지 못했습니다: '+e});
 </script>
 </body>

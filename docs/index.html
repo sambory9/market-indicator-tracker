@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>지표추적자 대시보드</title>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
 <style>
 :root{--bg:#f6f7f9;--card:#fff;--fg:#1d2330;--mut:#6b7280;--line:#e5e7eb;--up:#d93a3a;--dn:#2f6fdb;--chip:#eef1f5;--warn:#b45309;
 --ma20:#e0a100;--ma60:#16a34a;--ma120:#8b5cf6;--bb:#94a3b8}
@@ -32,10 +33,17 @@ h2{font-size:16px;margin:22px 0 10px}
 .sigs{margin-top:6px;display:flex;flex-wrap:wrap;gap:4px}.sigs span{font-size:11px;background:var(--chip);border-radius:8px;padding:1px 7px}
 table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:13px}td,th{padding:4px 6px;border-bottom:1px solid var(--line);text-align:right}th:first-child,td:first-child{text-align:left}
 .fch{height:240px}
+.stbl{margin-bottom:12px}.tw{overflow-x:auto}.stbl table{min-width:640px}.stbl td.wide,.stbl th.wide{text-align:left;color:var(--mut);font-size:12px}
+.dt{font-size:10px;color:var(--mut)}.sigs b{font-weight:600}
+#rep{display:none}#rep.on{display:block}.rep{line-height:1.6}.rep h1{font-size:17px}.rep h2{font-size:15px;margin:18px 0 6px}.rep table{margin:6px 0}
+.rep blockquote{margin:6px 0;padding:6px 10px;border-left:3px solid var(--line);color:var(--mut)}
+details summary{cursor:pointer;font-weight:600}
 </style>
 </head>
 <body>
-<header><h1>지표추적자 대시보드</h1><div class="sub" id="gen"></div><div class="sig" id="sig"></div></header>
+<header><h1>지표추적자 대시보드</h1><div class="sub" id="gen"></div>
+<div id="rep" class="card" style="margin-top:10px"><details open><summary id="repT">오늘의 리포트</summary><div class="rep" id="repB"></div></details></div>
+<div class="sig" id="sig"></div></header>
 <nav><div class="in" id="nav"></div></nav>
 <main id="main"></main>
 <script>
@@ -117,6 +125,30 @@ function flowCard(f){
   return el;
 }
 
+// 섹터 요약표: 리포트처럼 숫자를 한눈에 (차트 위에 배치)
+function pos(L){
+  const ma=[20,60,120].filter(n=>L['ma'+n]!=null);
+  const above=ma.filter(n=>L['above_ma'+n]);
+  let t = !ma.length ? '' : above.length===ma.length ? '이평선 모두 위' : !above.length ? '이평선 모두 아래' : `${above.join('·')}일선 위, ${ma.filter(n=>!L['above_ma'+n]).join('·')}일선 아래`;
+  if(L.bb_pos!=null) t += ` · 볼린저 ${L.bb_pos<=15?'하단 쪽':L.bb_pos>=85?'상단 쪽':'중간'}(${L.bb_pos}%)`;
+  if(L.range5_low!=null) t += ` · 5일 박스 ${fmt(L.range5_low)}~${fmt(L.range5_high)}`;
+  return t;
+}
+function sectorTable(items){
+  const w=document.createElement('div'); w.className='card stbl';
+  const rate=items.some(s=>s.rate);
+  const head = rate ? '<th>지표</th><th>금리</th><th>1일</th><th>5일</th><th>20일</th><th class="wide">위치</th>'
+                    : '<th>지표</th><th>값</th><th>1일</th><th>5일</th><th>주간</th><th>월간</th><th>RSI</th><th class="wide">위치</th>';
+  const bp=v=>v==null?'–':`<span class="${sgn(v)}">${v>0?'+':''}${v}bp</span>`;
+  const pc=v=>v==null?'–':`<span class="${sgn(v)}">${pctTxt(v)}</span>`;
+  const rows = items.map(s=>{const L=s.latest||{};
+    return rate ? `<tr><td>${s.name}<div class="dt">${L.date||''}</div></td><td>${fmt(L.close)}%</td><td>${bp(L.chg_1d_bp)}</td><td>${bp(L.chg_5d_bp)}</td><td>${bp(L.chg_20d_bp)}</td><td class="wide">${pos(L)}</td></tr>`
+                : `<tr><td>${s.name}<div class="dt">${L.date||''}</div></td><td>${fmt(L.close)}</td><td>${pc(L.chg_1d)}</td><td>${pc(L.chg_5d)}</td><td>${pc(L.chg_week)}</td><td>${pc(L.chg_month)}</td><td>${L.rsi14??'–'}</td><td class="wide">${pos(L)}</td></tr>`}).join('');
+  const sig = items.flatMap(s=>((s.latest||{}).signals||[]).map(x=>`<span><b>${s.name}</b> ${x}</span>`));
+  w.innerHTML = `<div class="tw"><table><tr>${head}</tr>${rows}</table></div>${sig.length?`<div class="sigs">${sig.join('')}</div>`:''}`;
+  return w;
+}
+
 function render(sector){
   charts.forEach(c=>c.remove()); charts=[];
   const m=document.getElementById('main'); m.innerHTML='';
@@ -125,6 +157,7 @@ function render(sector){
     const items = sec==='수급' ? DATA.flows : DATA.series.filter(s=>s.sector===sec);
     if(!items.length) return;
     const h=document.createElement('h2'); h.textContent=sec; m.appendChild(h);
+    if(sec!=='수급') m.appendChild(sectorTable(items));
     const g=document.createElement('div'); g.className='grid'; m.appendChild(g);
     items.forEach(s=>g.appendChild(sec==='수급'?flowCard(s):card(s)));
     if(sec==='금리' && DATA.spreads){const p=document.createElement('div');p.className='sub';p.style.marginTop='8px';
@@ -141,6 +174,13 @@ fetch('data.json?'+Date.now()).then(r=>r.json()).then(d=>{
   ['전체',...d.sectors].forEach(s=>{const b=document.createElement('button');b.textContent=s;b.className=s===cur?'on':'';
     b.onclick=()=>{cur=s;try{localStorage.setItem('sec',s)}catch(e){};nav.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));render(s)};nav.appendChild(b)});
   render(cur);
+  // 리포트 본문(있을 때만): Claude가 쓴 해석. 없으면 숨김
+  fetch('report.md?'+Date.now()).then(r=>r.ok?r.text():'').then(t=>{
+    if(!t||!window.marked) return;
+    const first=(t.match(/^#\s+(.+)$/m)||[])[1]; if(first) document.getElementById('repT').textContent=first;
+    document.getElementById('repB').innerHTML=marked.parse(t.replace(/^#\s+.+$/m,''));
+    document.getElementById('rep').classList.add('on');
+  }).catch(()=>{});
 }).catch(e=>{document.getElementById('main').textContent='데이터를 불러오지 못했습니다: '+e});
 </script>
 </body>

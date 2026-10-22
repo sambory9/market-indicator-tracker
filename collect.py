@@ -141,8 +141,18 @@ def fetch_flow_naver(market: str, pages: int = 15) -> pd.DataFrame:
                        f"?bizdate={bizdate}&sosok={sosok}&page={page}")
                 res = requests.get(url, headers=hdr, timeout=20)
                 res.encoding = "euc-kr"
-                tables = pd.read_html(io.StringIO(res.text))
+                try:
+                    tables = pd.read_html(io.StringIO(res.text))
+                except Exception as e:  # noqa: BLE001
+                    tables, _ = [], e
                 t = next((x for x in tables if x.shape[1] >= 8), None)
+                if page == 1:
+                    (FLOWS / f"_debug_{market}_{sosok or 'blank'}.txt").write_text(
+                        f"status={res.status_code} len={len(res.text)} url={res.url}\n"
+                        f"tables={[x.shape for x in tables]}\n"
+                        f"cols={[list(map(str, x.columns))[:12] for x in tables if x.shape[1] >= 8]}\n"
+                        f"head={[x.head(4).to_dict('records') for x in tables if x.shape[1] >= 8]}\n"
+                        f"---\n{res.text[:2500]}\n", encoding="utf-8")
                 if t is None:
                     break
                 if isinstance(t.columns, pd.MultiIndex):
@@ -271,6 +281,42 @@ def summarize_price(id_: str, name: str, sector: str, df: pd.DataFrame, is_rate=
             if len(hist) > 1 and np.sign(hist.iloc[-1]) != np.sign(hist.iloc[-2]):
                 signals.append("MACD 골든크로스" if hist.iloc[-1] > 0 else "MACD 데드크로스")
 
+    # 볼린저밴드(20, 2σ): 방송에서 '밴드 하단을 타고/끌고 내려간다'로 자주 언급
+    if len(c) >= 20:
+        mid, sd = c.rolling(20).mean(), c.rolling(20).std()
+        up_b, lo_b = mid + 2 * sd, mid - 2 * sd
+        out["bb_upper"], out["bb_lower"] = r(up_b.iloc[-1]), r(lo_b.iloc[-1])
+        width = up_b.iloc[-1] - lo_b.iloc[-1]
+        out["bb_pos"] = r((last - lo_b.iloc[-1]) / width * 100, 0) if width else None  # 0=하단, 100=상단
+        if last < lo_b.iloc[-1]:
+            signals.append("볼린저 하단 이탈")
+        elif last > up_b.iloc[-1]:
+            signals.append("볼린저 상단 돌파")
+
+    # 최근 박스권: 직전 5·10영업일 고가·저가 (오늘 제외)
+    hi_s = df["high"] if "high" in df and df["high"].notna().any() else c
+    lo_s = df["low"] if "low" in df and df["low"].notna().any() else c
+    for n in (5, 10):
+        if len(c) > n:
+            h, l = hi_s.iloc[-1 - n:-1].max(), lo_s.iloc[-1 - n:-1].min()
+            out[f"range{n}_high"], out[f"range{n}_low"] = r(h), r(l)
+    if out.get("range5_low") is not None:
+        if last < out["range5_low"]:
+            signals.append(f"최근 5일 박스 하단({out['range5_low']}) 이탈")
+        elif last > out["range5_high"]:
+            signals.append(f"최근 5일 박스 상단({out['range5_high']}) 돌파")
+
+    # 주봉: 주간 등락, 20·60·120주선 위치 (일요일 주간판용)
+    w = c.resample("W-FRI").last().dropna()
+    if len(w) >= 2:
+        out["chg_week"] = pct(w.iloc[-1], w.iloc[-2]) if not is_rate else r((w.iloc[-1] - w.iloc[-2]) * 100, 1)
+    for n in (20, 60, 120):
+        if len(w) >= n:
+            out[f"wma{n}"] = r(w.rolling(n).mean().iloc[-1])
+    m = c.resample("ME").last().dropna()
+    if len(m) >= 2 and not is_rate:
+        out["chg_month"] = pct(m.iloc[-1], m.iloc[-2])
+
     if out.get("chg_1d") is not None and abs(out["chg_1d"]) >= (3 if id_ != "btc" else 6):
         signals.append(f"일간 급변 {out['chg_1d']:+.2f}%")
     if is_rate and out.get("chg_1d_bp") is not None and abs(out["chg_1d_bp"]) >= 10:
@@ -283,7 +329,15 @@ def summarize_price(id_: str, name: str, sector: str, df: pd.DataFrame, is_rate=
 def summarize_flow(id_: str, name: str, df: pd.DataFrame) -> dict:
     df = df.dropna(how="all")
     out = {"id": id_, "name": name, "sector": "수급", "date": df.index[-1].strftime("%Y-%m-%d"),
-           "unit": "억원", "today": {}, "sum_5d": {}, "sum_20d": {}, "signals": []}
+           "unit": "억원", "today": {}, "sum_5d": {}, "sum_20d": {}, "sum_week": {}, "sum_ytd": {},
+           "signals": []}
+    last_d = df.index[-1]
+    week_start = last_d - pd.Timedelta(days=last_d.weekday())
+    for c in FLOW_COLS:
+        s = df[c].dropna()
+        if not s.empty:
+            out["sum_week"][c] = r(s[s.index >= week_start].sum(), 0)
+            out["sum_ytd"][c] = r(s[s.index.year == last_d.year].sum(), 0)
     for c in FLOW_COLS:
         s = df[c].dropna()
         if s.empty:

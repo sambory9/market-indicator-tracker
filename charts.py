@@ -73,7 +73,7 @@ def price_chart(id_, name, is_rate, latest, out_dir):
     idx = df.index
     x = list(range(len(idx)))
 
-    fig, ax = plt.subplots(figsize=(8, 3.4), dpi=100)
+    fig, ax = plt.subplots(figsize=(10, 4), dpi=160)
     flat = is_rate or df[["open", "high", "low"]].isna().all().all() or (df["open"] == df["close"]).all()
     if flat:
         ax.plot(x, df["close"], color="#1d2330", lw=1.6)
@@ -114,7 +114,7 @@ def flow_chart(id_, name, out_dir):
     df = pd.read_csv(p, index_col="date", parse_dates=["date"]).sort_index().fillna(0).iloc[-60:]
     x = list(range(len(df)))
     f = df["외국인"]
-    fig, ax = plt.subplots(figsize=(8, 3.4), dpi=100)
+    fig, ax = plt.subplots(figsize=(10, 4), dpi=160)
     ax.bar(x, f, color=[UP if v >= 0 else DN for v in f], width=0.7, label="외국인 일별")
     ax.axhline(0, color="#cbd5e1", lw=0.8)
     ax2 = ax.twinx()

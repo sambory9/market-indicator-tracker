@@ -70,7 +70,7 @@ nav{{display:none}}
  nav a{{display:block;padding:5px 0;color:var(--mut);text-decoration:none}}nav a:hover{{color:var(--fg)}}}}
 main{{min-width:0}}main>p,main>ul,main>blockquote{{max-width:820px}}
 .charts{{display:grid;grid-template-columns:1fr;gap:12px;margin:10px 0}}
-@media (min-width:900px){{.charts.n2{{grid-template-columns:repeat(2,minmax(0,1fr))}}.charts.n1{{max-width:820px}}}}
+
 .charts img{{margin:0}}
 h1{{font-size:21px;line-height:1.35}}h2{{font-size:17px;margin:28px 0 8px;padding-top:10px;border-top:1px solid var(--line)}}
 table{{border-collapse:collapse;max-width:100%;font-size:13px;font-variant-numeric:tabular-nums;display:block;overflow-x:auto}}

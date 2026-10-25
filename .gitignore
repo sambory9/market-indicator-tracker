@@ -3,3 +3,4 @@ __pycache__/
 docs/data.json
 docs/report.md
 *.report.html
+*.pdf

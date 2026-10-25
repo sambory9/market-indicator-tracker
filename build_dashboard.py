@@ -44,6 +44,7 @@ def main():
     series = []
 
     defs = [(i, n, s, False) for i, n, s, _ in YAHOO] + [(i, n, s, True) for i, n, s, _ in FRED + ECOS]
+    defs.append(("jgb30y", "일본 30년 국채", "금리", True))
     for id_, name, sector, is_rate in defs:
         p = DATA / "prices" / f"{id_}.csv"
         if not p.exists():
@@ -57,11 +58,12 @@ def main():
         })
 
     flows = []
-    for id_, name, _ in FLOW_MARKETS:
+    for id_, name, _ in FLOW_MARKETS + [("kospi200_fut_flow", "코스피200 선물 수급(계약)", None)]:
         p = DATA / "flows" / f"{id_}.csv"
         if not p.exists():
             continue
-        df = pd.read_csv(p, index_col="date", parse_dates=["date"]).sort_index().fillna(0)
+        df = pd.read_csv(p, index_col="date", parse_dates=["date"]).sort_index()
+        df = df[[c for c in df.columns if c in ("외국인", "개인", "기관합계", "기관", "연기금", "투신")]].fillna(0)
         flows.append({"id": id_, "name": name, "cols": list(df.columns),
                       "rows": [[i.strftime("%Y-%m-%d"), *map(float, r)] for i, r in
                                zip(df.index, df.itertuples(index=False))],

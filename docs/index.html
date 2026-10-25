@@ -106,7 +106,7 @@ function card(s){
 
 function flowCard(f){
   const el=document.createElement('div'); el.className='card'; const L=f.latest||{};
-  const cols=['외국인','개인','기관합계','연기금','투신'];
+  const cols=f.cols.slice().sort((a,b)=>['외국인','개인','기관합계','기관','연기금','투신'].indexOf(a)-['외국인','개인','기관합계','기관','연기금','투신'].indexOf(b));
   const tbl = `<table><tr><th>억원</th><th>오늘</th><th>주간</th><th>20일</th><th>올해</th></tr>${cols.map(c=>`<tr><td>${c}</td>${['today','sum_week','sum_20d','sum_ytd'].map(k=>{const v=(L[k]||{})[c];return `<td class="${sgn(v)}">${fmt(v,0)}</td>`}).join('')}</tr>`).join('')}</table>`;
   el.innerHTML = `<div class="top"><span class="nm">${f.name}</span><span class="meta">${L.date||''}</span></div>${tbl}
    <div class="seg" style="margin-top:8px">${cols.map((c,i)=>`<button data-c="${c}" class="${i?'':'on'}">${c}</button>`).join('')}</div>

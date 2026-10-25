@@ -16,6 +16,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import re
 import sys
 import time
 from datetime import datetime, timedelta, timezone
@@ -372,6 +373,127 @@ def summarize_price(id_: str, name: str, sector: str, df: pd.DataFrame, is_rate=
     return out
 
 
+# ---------------------------------------------------------------- 추가 지표 (방송에서 보는 것)
+
+DAUM_HDR = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+                          "(KHTML, like Gecko) Chrome/130.0 Safari/537.36",
+            "Referer": "https://finance.daum.net/", "Accept": "application/json, text/plain, */*"}
+FUT_COLS = ["외국인", "기관", "개인"]
+KOSPI200_MULT = 250_000  # 코스피200 선물 거래승수(원/포인트)
+ETF_RE = re.compile(r"KODEX|TIGER|KBSTAR|RISE |ACE |SOL |HANARO|PLUS |KIWOOM|KoAct|TIMEFOLIO|WON |1Q |BNK |"
+                    r"UNICORN|FOCUS|TRUSTON|마이티|히어로즈|ARIRANG|KOSEF|파워 |VITA|에셋플러스|마이다스|KCGI|"
+                    r"흥국|ITF|TREX|KTOP|ETN|레버리지|인버스|\(H\)|\(합성")
+
+
+def daum_json(url: str) -> dict:
+    res = requests.get(url, headers=DAUM_HDR, timeout=20)
+    res.raise_for_status()
+    return res.json()
+
+
+def fetch_futures_flow(pages: int = 6) -> pd.DataFrame:
+    """코스피200 선물(최근월물) 투자자별 순매수(계약). 다음 금융."""
+    masters = daum_json("https://finance.daum.net/api/futures/masters")["data"]
+    code = masters[0]["symbolCode"]
+    rows = []
+    for page in range(1, pages + 1):
+        d = daum_json(f"https://finance.daum.net/api/future/{code}/days?pagination=true&page={page}&perPage=100")
+        if not d.get("data"):
+            break
+        rows += d["data"]
+        time.sleep(0.3)
+    df = pd.DataFrame([{"date": pd.to_datetime(x["date"][:10]), "외국인": x.get("foreignSettlement"),
+                        "기관": x.get("institutionSettlement"), "개인": x.get("privateSettlement"),
+                        "종가": x.get("tradePrice"), "거래량": x.get("accTradeVolume"),
+                        "월물": masters[0]["name"]} for x in rows]).set_index("date").sort_index()
+    df = df[df["거래량"].fillna(0) > 0]  # 장 시작 전 placeholder 행 제거
+    return df[~df.index.duplicated(keep="last")]
+
+
+def summarize_futures(df: pd.DataFrame) -> dict:
+    df = df.dropna(subset=["외국인"])
+    amt = lambda n, p: r(n * p * KOSPI200_MULT / 1e8, 0)  # noqa: E731  계약 → 억원(추정)
+    last = df.iloc[-1]
+    last_d = df.index[-1]
+    week_start = last_d - pd.Timedelta(days=last_d.weekday())
+    out = {"id": "kospi200_fut_flow", "name": "코스피200 선물 수급", "sector": "수급",
+           "date": last_d.strftime("%Y-%m-%d"), "unit": "계약", "contract": last.get("월물"),
+           "today": {}, "today_amt": {}, "sum_week": {}, "sum_5d": {}, "sum_20d": {}, "signals": []}
+    for c in FUT_COLS:
+        s = df[c]
+        out["today"][c] = r(s.iloc[-1], 0)
+        out["today_amt"][c] = amt(s.iloc[-1], last["종가"])
+        out["sum_week"][c] = r(s[s.index >= week_start].sum(), 0)
+        out["sum_5d"][c] = r(s.iloc[-5:].sum(), 0)
+        out["sum_20d"][c] = r(s.iloc[-20:].sum(), 0)
+    f = df["외국인"]
+    sign, streak = np.sign(f.iloc[-1]), 0
+    for v in f.iloc[::-1]:
+        if np.sign(v) == sign and sign != 0:
+            streak += 1
+        else:
+            break
+    if streak >= 3:
+        out["signals"].append(f"외국인 선물 {streak}일 연속 {'순매수' if sign > 0 else '순매도'}")
+    if abs(out["today_amt"]["외국인"] or 0) >= 5000:
+        out["signals"].append(f"외국인 선물 대량 {'순매수' if sign > 0 else '순매도'}(약 {out['today_amt']['외국인']:+,.0f}억)")
+    return out
+
+
+def fetch_foreign_ratio() -> pd.DataFrame:
+    """코스피 외국인 보유 비중(%) = 종목별 외국인 지분율의 시가총액 가중 평균 (ETF·ETN 제외). 다음 금융."""
+    rows, page = [], 1
+    while page <= 20:
+        d = daum_json("https://finance.daum.net/api/trend/market_capitalization?"
+                      f"page={page}&perPage=200&fieldName=marketCap&order=desc&market=KOSPI&pagination=true")
+        rows += d.get("data", [])
+        if page >= d.get("totalPages", 1):
+            break
+        page += 1
+        time.sleep(0.3)
+    uniq = {x["code"]: x for x in rows}.values()
+    stocks = [x for x in uniq if x.get("foreignRatio") not in (None, "") and not ETF_RE.search(x["name"])]
+    cap = sum(x["marketCap"] for x in stocks)
+    ratio = sum(x["marketCap"] * float(x["foreignRatio"]) for x in stocks) / cap * 100
+    base = max(x["baseDate"] for x in stocks)
+    return pd.DataFrame({"close": [round(ratio, 3)], "stocks": [len(stocks)],
+                         "mcap_trn": [round(cap / 1e12, 1)]}, index=[pd.to_datetime(base)])
+
+
+def summarize_ratio(df: pd.DataFrame) -> dict:
+    c = df["close"].dropna()
+    back = lambda n: c.iloc[-1 - n] if len(c) > n else None  # noqa: E731
+    out = {"id": "foreign_ratio", "name": "외국인 코스피 보유 비중", "sector": "수급", "unit": "%",
+           "date": c.index[-1].strftime("%Y-%m-%d"), "close": r(c.iloc[-1], 2), "days": len(c), "signals": []}
+    for k, n in (("chg_1d_pp", 1), ("chg_5d_pp", 5), ("chg_20d_pp", 20)):
+        b = back(n)
+        out[k] = None if b is None else r(c.iloc[-1] - b, 2)
+    return out
+
+
+def fetch_jgb30() -> pd.DataFrame:
+    """일본 국채 30년 금리(%). 일본 재무성 일별 금리 CSV (전월까지 + 당월)."""
+    base = "https://www.mof.go.jp/english/policy/jgbs/reference/interest_rate/"
+    urls = [base + "jgbcme.csv"]
+    if not (PRICES / "jgb30y.csv").exists():
+        urls.insert(0, base + "historical/jgbcme_all.csv")
+    frames = []
+    for u in urls:
+        res = requests.get(u, timeout=60, headers={"User-Agent": "Mozilla/5.0"})
+        res.raise_for_status()
+        text = res.content.decode("utf-8", errors="ignore")
+        lines = text.splitlines()
+        h = next(i for i, ln in enumerate(lines) if ln.startswith("Date"))
+        t = pd.read_csv(io.StringIO("\n".join(lines[h:])))
+        t = t[["Date", "30Y"]].rename(columns={"Date": "date", "30Y": "close"})
+        t["date"] = pd.to_datetime(t["date"], errors="coerce")
+        t["close"] = pd.to_numeric(t["close"], errors="coerce")
+        frames.append(t.dropna())
+    df = pd.concat(frames).set_index("date").sort_index()
+    df = df[~df.index.duplicated(keep="last")]
+    return df[df.index >= df.index.max() - pd.Timedelta(days=365 * 3)]
+
+
 def summarize_flow(id_: str, name: str, df: pd.DataFrame) -> dict:
     df = df.dropna(how="all")
     out = {"id": id_, "name": name, "sector": "수급", "date": df.index[-1].strftime("%Y-%m-%d"),
@@ -466,6 +588,20 @@ def main():
         except Exception as e:  # noqa: BLE001
             errors.append(f"{name}: {e}")
             print(f"ERR {id_}: {e}", file=sys.stderr)
+
+    extra = [
+        ("코스피200 선물 수급", lambda: summarize_futures(merge_save(FLOWS / "kospi200_fut_flow.csv", fetch_futures_flow()))),
+        ("외국인 코스피 보유 비중", lambda: summarize_ratio(merge_save(PRICES / "foreign_ratio.csv", fetch_foreign_ratio()))),
+        ("일본 30년 국채", lambda: summarize_price("jgb30y", "일본 30년 국채", "금리",
+                                                merge_save(PRICES / "jgb30y.csv", fetch_jgb30()), is_rate=True)),
+    ]
+    for name, fn in extra:
+        try:
+            items.append(fn())
+            print(f"ok  {name}")
+        except Exception as e:  # noqa: BLE001
+            errors.append(f"{name}: {type(e).__name__}: {str(e)[:120]}")
+            print(f"ERR {name}: {e}", file=sys.stderr)
 
     # 공개 저장소이므로 오류 문구에 비밀값이 남지 않게 한다
     if key:

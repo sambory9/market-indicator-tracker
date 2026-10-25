@@ -107,11 +107,12 @@ def price_chart(id_, name, is_rate, latest, out_dir):
     return path
 
 
-def flow_chart(id_, name, out_dir):
+def flow_chart(id_, name, out_dir, unit="억원"):
     p = DATA / "flows" / f"{id_}.csv"
     if not p.exists():
         return None
-    df = pd.read_csv(p, index_col="date", parse_dates=["date"]).sort_index().fillna(0).iloc[-60:]
+    df = pd.read_csv(p, index_col="date", parse_dates=["date"]).sort_index()
+    df = df[[c for c in df.columns if c in ("외국인", "개인", "기관합계", "기관")]].fillna(0).iloc[-60:]
     x = list(range(len(df)))
     f = df["외국인"]
     fig, ax = plt.subplots(figsize=(10, 4), dpi=160)
@@ -123,7 +124,7 @@ def flow_chart(id_, name, out_dir):
     ax2.tick_params(labelsize=8, colors="#475569", length=0)
     for sp in ax2.spines.values():
         sp.set_visible(False)
-    ax.set_title(f"{name}  외국인 (60일, 억원)", loc="left", fontsize=11, fontweight="bold",
+    ax.set_title(f"{name}  외국인 (60일, {unit})", loc="left", fontsize=11, fontweight="bold",
                  color="#1d2330")
     style(ax)
     ax.yaxis.tick_left()
@@ -134,6 +135,30 @@ def flow_chart(id_, name, out_dir):
               borderaxespad=0.2)
     fig.tight_layout()
     path = out_dir / f"{id_}.png"
+    fig.savefig(path, facecolor="white")
+    plt.close(fig)
+    return path
+
+
+def ratio_chart(latest, out_dir):
+    """외국인 코스피 보유 비중(%) 추이. 2일 이상 쌓였을 때만."""
+    p = DATA / "prices" / "foreign_ratio.csv"
+    if not p.exists():
+        return None
+    s = pd.read_csv(p, index_col="date", parse_dates=["date"]).sort_index()["close"].dropna().iloc[-250:]
+    if len(s) < 2:
+        return None
+    fig, ax = plt.subplots(figsize=(10, 4), dpi=160)
+    x = list(range(len(s)))
+    ax.plot(x, s, color="#2f6fdb", lw=1.8, marker="o" if len(s) < 30 else None, ms=3)
+    ax.annotate(f"{s.iloc[-1]:.2f}%", (x[-1], s.iloc[-1]), xytext=(4, 0), textcoords="offset points",
+                fontsize=8, color="#1d2330", va="center")
+    ax.set_title(f"외국인 코스피 보유 비중  {s.iloc[-1]:.2f}%", loc="left", fontsize=11, fontweight="bold",
+                 color="#1d2330")
+    style(ax)
+    date_axis(ax, s.index)
+    fig.tight_layout()
+    path = out_dir / "foreign_ratio.png"
     fig.savefig(path, facecolor="white")
     plt.close(fig)
     return path
@@ -157,6 +182,13 @@ def main():
     for id_, name, _ in FLOW_MARKETS:
         if flow_chart(id_, name, out_dir):
             made.append(id_)
+    # 방송 추가 지표
+    if price_chart("jgb30y", "일본 30년 국채", True, by_id.get("jgb30y"), out_dir):
+        made.append("jgb30y")
+    if flow_chart("kospi200_fut_flow", "코스피200 선물", out_dir, unit="계약"):
+        made.append("kospi200_fut_flow")
+    if ratio_chart(by_id.get("foreign_ratio"), out_dir):
+        made.append("foreign_ratio")
     (out_dir / "index.json").write_text(json.dumps(made), encoding="utf-8")
 
     # 오래된 날짜 폴더 정리

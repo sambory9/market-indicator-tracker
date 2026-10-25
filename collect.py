@@ -406,7 +406,8 @@ def fetch_futures_flow(pages: int = 6) -> pd.DataFrame:
                         "기관": x.get("institutionSettlement"), "개인": x.get("privateSettlement"),
                         "종가": x.get("tradePrice"), "거래량": x.get("accTradeVolume"),
                         "월물": masters[0]["name"]} for x in rows]).set_index("date").sort_index()
-    df = df[df["거래량"].fillna(0) > 0]  # 장 시작 전 placeholder 행 제거
+    # 최근월물이 되기 전(원월물 시절) 거래가 거의 없던 기간과 장 시작 전 placeholder 행을 제외한다
+    df = df[df["거래량"].fillna(0) >= 10000]
     return df[~df.index.duplicated(keep="last")]
 
 

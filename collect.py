@@ -456,7 +456,18 @@ def fetch_foreign_ratio() -> pd.DataFrame:
     stocks = [x for x in uniq if x.get("foreignRatio") not in (None, "") and not ETF_RE.search(x["name"])]
     cap = sum(x["marketCap"] for x in stocks)
     ratio = sum(x["marketCap"] * float(x["foreignRatio"]) for x in stocks) / cap * 100
-    base = max(x["baseDate"] for x in stocks)
+    # 기준일 필드는 응답에 따라 없을 수 있다(10/26부터 평일 수집에서 KeyError 'baseDate').
+    # 있는 값 중 최신을 쓰고, 없으면 KST 오늘(주말이면 직전 금요일)로 둔다.
+    dates = [str(x.get(k))[:10] for x in stocks for k in ("baseDate", "tradeDate", "date") if x.get(k)]
+    if not dates:
+        print(f"WARN foreign_ratio: 기준일 필드 없음, KST 오늘로 저장. keys={sorted(stocks[0].keys())}", file=sys.stderr)
+    if dates:
+        base = max(dates)
+    else:
+        d = datetime.now(KST).date()
+        while d.weekday() >= 5:
+            d -= timedelta(days=1)
+        base = d.strftime("%Y-%m-%d")
     return pd.DataFrame({"close": [round(ratio, 3)], "stocks": [len(stocks)],
                          "mcap_trn": [round(cap / 1e12, 1)]}, index=[pd.to_datetime(base)])
 
